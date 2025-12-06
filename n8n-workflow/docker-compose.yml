@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  # YouTube Transcript Microservice
+  youtube-transcript:
+    build: ./youtube-transcript-api
+    container_name: youtube-transcript
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    networks:
+      - youtube-automation
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # n8n Workflow Automation
+  n8n:
+    image: n8nio/n8n
+    container_name: n8n
+    ports:
+      - "5678:5678"
+    restart: unless-stopped
+    networks:
+      - youtube-automation
+    volumes:
+      - n8n_data:/home/node/.n8n
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=false
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+
+networks:
+  youtube-automation:
+    name: youtube-automation
+    driver: bridge
+
+volumes:
+  n8n_data:
+    driver: local

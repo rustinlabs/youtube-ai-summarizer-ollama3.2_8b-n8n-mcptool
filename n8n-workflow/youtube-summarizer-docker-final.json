@@ -1,0 +1,191 @@
+{
+  "name": "YouTube Summarizer - Docker Ready",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "youtube-summary",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const youtubeUrl = $input.first().json.body.url;\n\nlet videoId;\nif (youtubeUrl.includes('youtu.be/')) {\n  videoId = youtubeUrl.split('youtu.be/')[1].split('?')[0];\n} else if (youtubeUrl.includes('watch?v=')) {\n  videoId = youtubeUrl.split('v=')[1].split('&')[0];\n} else {\n  throw new Error('Invalid YouTube URL format');\n}\n\nreturn {\n  json: {\n    url: youtubeUrl,\n    videoId: videoId\n  }\n};"
+      },
+      "id": "extract-id",
+      "name": "Extract Video ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3000/transcript",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "application/json",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "videoId",
+              "value": "={{ $json.videoId }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-transcript",
+      "name": "Get Transcript",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst videoId = $('Extract Video ID').first().json.videoId;\nconst url = $('Extract Video ID').first().json.url;\n\nreturn {\n  json: {\n    videoId: videoId,\n    url: url,\n    transcript: data.transcript,\n    wordCount: data.wordCount\n  }\n};"
+      },
+      "id": "parse-transcript",
+      "name": "Parse Transcript",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const transcript = $input.first().json.transcript;\nconst url = $input.first().json.url;\n\nconst prompt = `You are an expert content analyzer. Analyze this YouTube video transcript and provide:\n\n1. ONE-SENTENCE SUMMARY: Distill the core message in one sentence\n2. KEY POINTS: List 3-5 main takeaways as bullet points\n3. ACTION ITEMS: What concrete actions or recommendations does this suggest?\n4. TOPICS: List relevant topics/categories (comma-separated)\n\nTranscript:\n${transcript}\n\nProvide your response in this exact format:\n\nSUMMARY: [one sentence]\n\nKEY POINTS:\n- [point 1]\n- [point 2]\n- [point 3]\n\nACTION ITEMS:\n- [action 1]\n- [action 2]\n\nTOPICS: [topic1, topic2, topic3]`;\n\nreturn {\n  json: {\n    videoId: $input.first().json.videoId,\n    url: url,\n    transcript: transcript,\n    wordCount: $input.first().json.wordCount,\n    prompt: prompt\n  }\n};"
+      },
+      "id": "build-prompt",
+      "name": "Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/chat",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "application/json",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "llama3.2:3b"
+            },
+            {
+              "name": "messages",
+              "value": "={{ [{ \"role\": \"user\", \"content\": $json.prompt }] }}"
+            },
+            {
+              "name": "stream",
+              "value": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "call-ollama",
+      "name": "Call Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\nlet llmResponse;\nif (input.message && input.message.content) {\n  llmResponse = input.message.content;\n} else if (input.choices && input.choices[0]) {\n  llmResponse = input.choices[0].message.content;\n} else if (input.response) {\n  llmResponse = input.response;\n} else {\n  llmResponse = JSON.stringify(input);\n}\n\nconst videoData = $('Parse Transcript').first().json;\n\nreturn {\n  json: {\n    success: true,\n    videoId: videoData.videoId,\n    url: videoData.url,\n    summary: llmResponse,\n    wordCount: videoData.wordCount,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract Video ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Video ID": {
+      "main": [
+        [
+          {
+            "node": "Get Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Transcript": {
+      "main": [
+        [
+          {
+            "node": "Parse Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Transcript": {
+      "main": [
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "Call Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Ollama": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2024-12-05T00:00:00.000Z",
+  "versionId": "1"
+}

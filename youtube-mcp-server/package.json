@@ -1,0 +1,16 @@
+{
+  "name": "youtube-mcp-server",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "MCP server for YouTube video summarization",
+  "main": "index.js",
+  "bin": {
+    "youtube-mcp-server": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4"
+  }
+}

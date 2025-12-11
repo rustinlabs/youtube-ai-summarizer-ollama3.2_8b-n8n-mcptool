@@ -343,9 +343,9 @@ MIT License - see LICENSE file for details
 
 ## 📧 Contact
 
-Rustin Kormos - [Your Email/LinkedIn]
+Rustin Kormos -
 
-Project Link: https://github.com/yourusername/youtube-ai-summarizer
+Project Link: https://github.com/rustinlabs/youtube-ai-summarizer
 
 ---
 
